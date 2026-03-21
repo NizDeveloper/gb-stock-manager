@@ -15,7 +15,7 @@ class MyApp extends StatelessWidget {
       title: 'GB Stock Manager',
       debugShowCheckedModeBanner: false,
       // initialRoute: '/login',
-      initialRoute: '/HomePage',
+      initialRoute: '/home',
       routes: {
         '/login': (context) => const LoginPage(),
         '/home':  (context) => const HomePage(),

@@ -15,6 +15,15 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
+  // Callback que InventoryPage registra para abrir su formulario
+  VoidCallback? _openInventoryForm;
+
+  void _onFabPressed() {
+    if (_selectedIndex == 1 && _openInventoryForm != null) {
+      _openInventoryForm!();
+    }
+  }
+
   Widget _navItem(IconData icon, String label, int index) {
     final isActive = _selectedIndex == index;
     return InkWell(
@@ -45,10 +54,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Botón del medio
   Widget _buildFab() {
     return GestureDetector(
-      onTap: () {},
+      onTap: _onFabPressed,
       child: Container(
         width: 56,
         height: 56,
@@ -74,11 +82,13 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: AppTheme.background,
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [
-          DashboardPage(),
-          InventoryPage(),
-          CatalogPage(),
-          ReportsPage(),
+        children: [
+          const DashboardPage(),
+          InventoryPage(
+            onRegisterOpen: (cb) => _openInventoryForm = cb,
+          ),
+          const CatalogPage(),
+          const ReportsPage(),
         ],
       ),
 
