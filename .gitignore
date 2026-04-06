@@ -49,3 +49,6 @@ app.*.map.json
 
 # Node
 node_modules
+
+# API Config local
+lib/core/network/api_config.dart
