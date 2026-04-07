@@ -1,9 +1,12 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const authRoutes    = require('./routes/auth');
 const productRoutes = require('./routes/products');
+const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
 
@@ -14,6 +17,7 @@ app.use(express.json());
 // Rutas
 app.use('/api/auth',     authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
