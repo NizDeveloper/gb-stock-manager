@@ -1,44 +1,51 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/users');
+const db = require('../config/db');
 
-exports.register = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+const login = (req, res) => {
+  const { email, password } = req.body;
 
-    const exists = await User.findOne({ where: { email } });
-    if (exists) return res.status(409).json({ message: 'Email ya registrado' });
-
-    const hashed = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hashed });
-
-    res.status(201).json({ message: 'Usuario creado', userId: user.id });
-  } catch (err) {
-    res.status(500).json({ message: 'Error en el servidor', error: err.message });
+  // ─── Validar que vengan los datos ───
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email y contraseña son requeridos' });
   }
-};
 
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  // ─── Buscar usuario en la DB ───
+  db.query('SELECT * FROM users WHERE email = ?', [email], async (err, results) => {
+    if (err) {
+      console.log('❌ Error DB:', err);
+      return res.status(500).json({ message: 'Error en el servidor' });
+    }
 
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(401).json({ message: 'Credenciales incorrectas' });
+    if (results.length === 0) {
+      return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
+    }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ message: 'Credenciales incorrectas' });
+    const user = results[0];
 
+    // ─── Verificar contraseña ───
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({ message: 'Usuario o contraseña incorrectos' });
+    }
+
+    // ─── Generar token ───
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: '8h' }
     );
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: {
+        id:    user.id,
+        name:  user.name,
+        email: user.email,
+        role:  user.role,
+      }
     });
-  } catch (err) {
-    res.status(500).json({ message: 'Error en el servidor', error: err.message });
-  }
+  });
 };
+
+module.exports = { login };
