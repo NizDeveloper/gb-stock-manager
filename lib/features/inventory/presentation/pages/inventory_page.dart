@@ -32,16 +32,7 @@ class Product {
   });
 }
 
-// ─── Datos de prueba ───
-final List<Product> _sampleProducts = [
-  Product(id: '1', name: 'Laptop HP Pavilion 15', sku: 'HP-PAV-15',   category: 'Electrónica',  icon: '💻', buyPrice: 900,  sellPrice: 1099, stock: 0,  minStock: 3),
-  Product(id: '2', name: 'Audífonos Sony WH-1000XM5', sku: 'SNY-WH-X5', category: 'Audio',       icon: '🎧', buyPrice: 200,  sellPrice: 299,  stock: 25, minStock: 5),
-  Product(id: '3', name: 'Mouse Logitech MX Master 3', sku: 'LGT-MX3', category: 'Periféricos',  icon: '🖱️', buyPrice: 80,   sellPrice: 129,  stock: 4,  minStock: 5),
-  Product(id: '4', name: 'Teclado mecánico Keychron K2', sku: 'KCH-K2-BL', category: 'Periféricos', icon: '⌨️', buyPrice: 100, sellPrice: 149, stock: 4, minStock: 5),
-  Product(id: '5', name: 'Monitor LG 27" 4K', sku: 'LG-27UK850',     category: 'Electrónica',  icon: '🖥️', buyPrice: 400,  sellPrice: 599,  stock: 6,  minStock: 2),
-  Product(id: '6', name: 'Webcam Logitech C920', sku: 'LGT-C920',     category: 'Accesorios',   icon: '📷', buyPrice: 55,   sellPrice: 89,   stock: 12, minStock: 4),
-  Product(id: '7', name: 'Hub USB-C 7 puertos', sku: 'USB-HUB-7P',    category: 'Accesorios',   icon: '🔌', buyPrice: 25,   sellPrice: 45,   stock: 18, minStock: 6),
-];
+final List<Product> _sampleProducts = [];
 
 const List<String> _allCategories = [
   'Todos', 'Electrónica', 'Audio', 'Periféricos', 'Accesorios', 'Oficina', 'Ropa',
@@ -49,7 +40,7 @@ const List<String> _allCategories = [
 
 // ─── Íconos disponibles para el formulario ───
 const List<String> _availableIcons = [
-  '💻','📱','🖥️','🖨️','🖱️','📷','🎧','🖨️',
+  '💻','📱','🖥️','🖨️','🖱️','📷','🎧',
   '📦','🔧','💡','🔋',
 ];
 
