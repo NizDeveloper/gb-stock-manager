@@ -15,9 +15,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   bool _loading = true;
 
-  // Datos del dashboard reutilizados
   double _totalValue    = 0;
-  double _avgMargin     = 0;
   int    _totalProducts = 0;
   int    _lowStock      = 0;
   int    _outOfStock    = 0;
@@ -25,9 +23,12 @@ class _ReportsPageState extends State<ReportsPage> {
   List<dynamic> _lowStockProducts = [];
   List<dynamic> _allProducts      = [];
 
-  // Movimientos simulados por día (L-D)
-  final List<int> _weekMovements = [12, 8, 15, 6, 10, 20, 14];
-  final List<String> _weekLabels = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  // Movimientos semanales reales
+  final List<int> _weekMovements = [0, 0, 0, 0, 0, 0, 0];
+  final List<String> _weekLabels = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+
+  int _totalEntries = 0;
+  int _totalExits   = 0;
 
   @override
   void initState() {
@@ -39,27 +40,38 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => _loading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
-      _apiService.setToken(token);
+      _apiService.setToken(prefs.getString('token') ?? '');
 
-      final stats    = await _apiService.getDashboardStats();
-      final lowStock = await _apiService.getLowStockProducts();
-      final products = await _apiService.getProducts();
+      final results = await Future.wait([
+        _apiService.getDashboardStats(),
+        _apiService.getLowStockProducts(),
+        _apiService.getProducts(),
+        _apiService.getWeeklyMovements(),
+        _apiService.getMovementsSummary(),
+      ]);
 
-      // Margen promedio calculado desde productos
-      double margin = 0;
-      if (products.isNotEmpty) {
-        double total = 0;
-        int count = 0;
-        for (final p in products) {
-          final buy  = double.tryParse(p['buy_price']?.toString()  ?? '0') ?? 0;
-          final sell = double.tryParse(p['sell_price']?.toString() ?? p['price']?.toString() ?? '0') ?? 0;
-          if (buy > 0 && sell > 0) {
-            total += ((sell - buy) / sell) * 100;
-            count++;
-          }
+      final stats    = results[0] as Map<String, dynamic>;
+      final lowStock = results[1] as List<dynamic>;
+      final products = results[2] as List<dynamic>;
+      final weekly   = results[3] as List<dynamic>;
+      final summary  = results[4] as List<dynamic>;
+
+      // Mapear movimientos por día (DAYOFWEEK: 1=Dom, 2=Lun ... 7=Sab)
+      final List<int> movements = [0, 0, 0, 0, 0, 0, 0];
+      for (final row in weekly) {
+        final dayNum = (row['day_num'] as int) - 1; // 0-6
+        movements[dayNum] = int.tryParse(row['total'].toString()) ?? 0;
+      }
+
+      // Resumen entradas/salidas
+      int entries = 0;
+      int exits   = 0;
+      for (final row in summary) {
+        if (row['type'] == 'entry') {
+          entries = int.tryParse(row['total_qty'].toString()) ?? 0;
+        } else if (row['type'] == 'exit') {
+          exits = int.tryParse(row['total_qty'].toString()) ?? 0;
         }
-        if (count > 0) margin = total / count;
       }
 
       setState(() {
@@ -67,9 +79,11 @@ class _ReportsPageState extends State<ReportsPage> {
         _totalProducts = stats['totalProducts'] ?? 0;
         _lowStock      = stats['lowStock']      ?? 0;
         _outOfStock    = stats['outOfStock']    ?? 0;
-        _avgMargin     = margin;
         _lowStockProducts = lowStock;
         _allProducts      = products;
+        _weekMovements.setAll(0, movements);
+        _totalEntries  = entries;
+        _totalExits    = exits;
         _loading = false;
       });
     } catch (e) {
@@ -81,12 +95,12 @@ class _ReportsPageState extends State<ReportsPage> {
   List<Map<String, dynamic>> get _byCategory {
     final Map<String, int> map = {};
     for (final p in _allProducts) {
-      final cat = (p['category_name'] ?? p['category'] ?? 'Sin categoría').toString();
+      final cat = (p['category_name'] ?? 'Sin categoría').toString();
       map[cat] = (map[cat] ?? 0) + 1;
     }
     final list = map.entries
-        .map((e) => {'name': e.key, 'count': e.value})
-        .toList()
+      .map((e) => {'name': e.key, 'count': e.value})
+      .toList()
       ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
     return list;
   }
@@ -104,13 +118,17 @@ class _ReportsPageState extends State<ReportsPage> {
 
   IconData _iconForCategory(String name) {
     final n = name.toLowerCase();
-    if (n.contains('electr'))                                    return Icons.computer_outlined;
-    if (n.contains('audio'))                                     return Icons.headphones_outlined;
-    if (n.contains('periférico') || n.contains('periferico'))    return Icons.keyboard_outlined;
-    if (n.contains('accesorio'))                                 return Icons.backpack_outlined;
-    if (n.contains('oficina'))                                   return Icons.assignment_outlined;
-    if (n.contains('red') || n.contains('network'))              return Icons.language_outlined;
-    if (n.contains('ropa') || n.contains('moda'))                return Icons.checkroom_outlined;
+    if (n.contains('electr'))                                  return Icons.computer_outlined;
+    if (n.contains('audio'))                                   return Icons.headphones_outlined;
+    if (n.contains('periférico') || n.contains('periferico')) return Icons.keyboard_outlined;
+    if (n.contains('accesorio'))                               return Icons.backpack_outlined;
+    if (n.contains('oficina'))                                 return Icons.assignment_outlined;
+    if (n.contains('red') || n.contains('network'))            return Icons.language_outlined;
+    if (n.contains('ropa') || n.contains('moda'))              return Icons.checkroom_outlined;
+    if (n.contains('bebida'))                                  return Icons.local_drink_outlined;
+    if (n.contains('grano') || n.contains('cereal'))           return Icons.grain_outlined;
+    if (n.contains('lácteo') || n.contains('lacteo'))          return Icons.breakfast_dining_outlined;
+    if (n.contains('limpieza'))                                return Icons.cleaning_services_outlined;
     return Icons.category_outlined;
   }
 
@@ -120,38 +138,33 @@ class _ReportsPageState extends State<ReportsPage> {
       backgroundColor: AppTheme.background,
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-            : RefreshIndicator(
-                color: AppTheme.primary,
-                onRefresh: _loadData,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Título
-                      const Text(
-                        'Reportes',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      _buildValueCard(),
-                      const SizedBox(height: 12),
-                      _buildMovementsCard(),
-                      const SizedBox(height: 12),
-                      _buildAlertCard(),
-                      const SizedBox(height: 12),
-                      _buildCategoryCard(),
-                    ],
-                  ),
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+          : RefreshIndicator(
+              color: AppTheme.primary,
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Reportes',
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark)),
+                    const SizedBox(height: 16),
+                    _buildValueCard(),
+                    const SizedBox(height: 12),
+                    _buildMovementsCard(),
+                    const SizedBox(height: 12),
+                    _buildMovementsSummaryCard(),
+                    const SizedBox(height: 12),
+                    _buildAlertCard(),
+                    const SizedBox(height: 12),
+                    _buildCategoryCard(),
+                  ],
                 ),
               ),
+            ),
       ),
     );
   }
@@ -163,12 +176,12 @@ class _ReportsPageState extends State<ReportsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Container(
@@ -177,16 +190,18 @@ class _ReportsPageState extends State<ReportsPage> {
                   color: AppTheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.bar_chart_rounded, color: AppTheme.primary, size: 22),
+                child: const Icon(Icons.bar_chart_rounded,
+                    color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 12),
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Valor del inventario',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.textDark)),
-                  Text('Actualizado hoy',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: AppTheme.textDark)),
+                  Text('Precio × stock de todos los productos',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                 ],
               ),
             ],
@@ -200,37 +215,23 @@ class _ReportsPageState extends State<ReportsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '\$${_totalValue.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textDark,
-                      ),
+                      '\$${_totalValue.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 32,
+                          fontWeight: FontWeight.bold, color: AppTheme.textDark),
                     ),
-                    Row(
-                      children: const [
-                        Icon(Icons.arrow_upward, color: Colors.green, size: 13),
-                        SizedBox(width: 2),
-                        Text('vs mes anterior',
-                            style: TextStyle(fontSize: 11, color: Colors.green)),
-                      ],
-                    ),
+                    Text('$_totalProducts productos en inventario',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('Margen promedio',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
-                  Text(
-                    '${_avgMargin.toStringAsFixed(0)}%',
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
+                  const Text('Sin stock',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                  Text('$_outOfStock',
+                    style: const TextStyle(fontSize: 26,
+                        fontWeight: FontWeight.bold, color: Colors.red)),
                 ],
               ),
             ],
@@ -249,7 +250,8 @@ class _ReportsPageState extends State<ReportsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,23 +264,26 @@ class _ReportsPageState extends State<ReportsPage> {
                   color: Colors.green.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.trending_up_rounded, color: Colors.green, size: 22),
+                child: const Icon(Icons.trending_up_rounded,
+                    color: Colors.green, size: 22),
               ),
               const SizedBox(width: 12),
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Movimientos por día',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.textDark)),
-                  Text('Últimos 7 días',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: AppTheme.textDark)),
+                  Text('Últimos 7 días (entradas + salidas)',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 16),
-          if (_totalProducts == 0) ...[
-            _emptyState(Icons.trending_up_rounded, 'Sin movimientos', 'Los movimientos aparecerán aquí cuando registres productos en el inventario.'),
+          if (maxVal == 0) ...[
+            _emptyState(Icons.trending_up_rounded, 'Sin movimientos',
+              'Los movimientos aparecerán aquí cuando registres entradas o salidas.'),
           ] else ...[
             SizedBox(
               height: 90,
@@ -297,11 +302,11 @@ class _ReportsPageState extends State<ReportsPage> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 400),
                             width: 28,
-                            height: 70 * ratio,
+                            height: ratio == 0 ? 4 : 70 * ratio,
                             decoration: BoxDecoration(
                               color: isMax
-                                  ? AppTheme.primary
-                                  : AppTheme.primary.withOpacity(0.3),
+                                ? AppTheme.primary
+                                : AppTheme.primary.withOpacity(0.3),
                               borderRadius: BorderRadius.circular(6),
                             ),
                           ),
@@ -309,7 +314,8 @@ class _ReportsPageState extends State<ReportsPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(_weekLabels[i],
-                          style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                        style: const TextStyle(fontSize: 11,
+                            color: AppTheme.textGrey)),
                     ],
                   );
                 }),
@@ -321,7 +327,112 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  // ─── 3. Productos en alerta ───
+  // ─── 3. Resumen entradas vs salidas ───
+  Widget _buildMovementsSummaryCard() {
+    final total = _totalEntries + _totalExits;
+    final entryRatio = total > 0 ? _totalEntries / total : 0.0;
+    final exitRatio  = total > 0 ? _totalExits  / total : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.swap_vert_rounded,
+                    color: Colors.blue, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Entradas vs Salidas',
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: AppTheme.textDark)),
+                  Text('Total histórico de movimientos',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (total == 0) ...[
+            _emptyState(Icons.swap_vert_rounded, 'Sin movimientos registrados',
+              'Ajusta el stock de productos para generar movimientos.'),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _summaryTile('Entradas', _totalEntries,
+                      Colors.green, Icons.arrow_downward_rounded, entryRatio),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _summaryTile('Salidas', _totalExits,
+                      Colors.red, Icons.arrow_upward_rounded, exitRatio),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryTile(String label, int qty, Color color,
+      IconData icon, double ratio) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Text(label,
+                style: TextStyle(fontSize: 12, color: color,
+                    fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('$qty uds',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+                color: color)),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 4,
+              backgroundColor: Colors.black.withOpacity(0.06),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── 4. Productos en alerta ───
   Widget _buildAlertCard() {
     final alerts = _lowStockProducts;
 
@@ -330,7 +441,8 @@ class _ReportsPageState extends State<ReportsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,33 +455,37 @@ class _ReportsPageState extends State<ReportsPage> {
                   color: Colors.orange.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+                child: const Icon(Icons.warning_amber_rounded,
+                    color: Colors.orange, size: 22),
               ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('Productos en alerta',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.textDark)),
-                  Text('Stock bajo o agotado',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                children: [
+                  const Text('Productos en alerta',
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: AppTheme.textDark)),
+                  Text('$_lowStock bajo stock · $_outOfStock agotados',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                 ],
               ),
             ],
           ),
           if (_totalProducts == 0) ...[
             const SizedBox(height: 16),
-            _emptyState(Icons.warning_amber_rounded, 'Sin productos registrados', 'Las alertas de stock bajo o agotado aparecerán aquí cuando tengas productos.'),
+            _emptyState(Icons.warning_amber_rounded, 'Sin productos registrados',
+              'Las alertas aparecerán aquí cuando tengas productos en inventario.'),
           ] else if (alerts.isEmpty) ...[
             const SizedBox(height: 16),
-            _emptyState(Icons.check_circle_outline, 'Todo en orden', 'Ningún producto tiene stock bajo o agotado por el momento.'),
+            _emptyState(Icons.check_circle_outline, 'Todo en orden',
+              'Ningún producto tiene stock bajo o agotado por el momento.'),
           ] else ...[
             const SizedBox(height: 12),
             ...alerts.map((p) {
-              final qty  = p['quantity_in_stock'] ?? p['stock'] ?? 0;
-              final name = p['name'] ?? '';
-              final sku  = p['sku']  ?? '';
-              final isOut = qty == 0;
+              final qty    = p['quantity_in_stock'] ?? 0;
+              final name   = p['name'] ?? '';
+              final code   = p['code'] ?? '';
+              final isOut  = qty == 0;
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -385,7 +501,8 @@ class _ReportsPageState extends State<ReportsPage> {
                         color: Colors.blueGrey.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.inventory_2_outlined, size: 18, color: AppTheme.textGrey),
+                      child: const Icon(Icons.inventory_2_outlined,
+                          size: 18, color: AppTheme.textGrey),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -393,21 +510,21 @@ class _ReportsPageState extends State<ReportsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: AppTheme.textDark)),
-                          Text(sku,
-                              style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                            style: const TextStyle(fontWeight: FontWeight.w600,
+                                fontSize: 13, color: AppTheme.textDark)),
+                          Text(code,
+                            style: const TextStyle(fontSize: 11,
+                                color: AppTheme.textGrey)),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: isOut
-                            ? Colors.red.withOpacity(0.12)
-                            : Colors.orange.withOpacity(0.12),
+                          ? Colors.red.withOpacity(0.12)
+                          : Colors.orange.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -429,9 +546,9 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  // ─── 4. Por categoría ───
+  // ─── 5. Por categoría ───
   Widget _buildCategoryCard() {
-    final cats = _byCategory;
+    final cats     = _byCategory;
     final maxCount = cats.isEmpty ? 1 : (cats.first['count'] as int);
 
     return Container(
@@ -439,7 +556,8 @@ class _ReportsPageState extends State<ReportsPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+            blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,23 +570,26 @@ class _ReportsPageState extends State<ReportsPage> {
                   color: AppTheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.grid_view_rounded, color: AppTheme.primary, size: 22),
+                child: const Icon(Icons.grid_view_rounded,
+                    color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 12),
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Por categoría',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.textDark)),
+                    style: TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 15, color: AppTheme.textDark)),
                   Text('Distribución del inventario',
-                      style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                    style: TextStyle(fontSize: 11, color: AppTheme.textGrey)),
                 ],
               ),
             ],
           ),
           if (cats.isEmpty) ...[
             const SizedBox(height: 16),
-            _emptyState(Icons.grid_view_rounded, 'Sin categorías aún', 'Agrega productos al inventario para ver la distribución por categoría.'),
+            _emptyState(Icons.grid_view_rounded, 'Sin categorías aún',
+              'Agrega productos al inventario para ver la distribución.'),
           ] else ...[
             const SizedBox(height: 16),
             ...cats.asMap().entries.map((entry) {
@@ -478,12 +599,12 @@ class _ReportsPageState extends State<ReportsPage> {
               final count = cat['count'] as int;
               final ratio = maxCount > 0 ? count / maxCount : 0.0;
               final color = _categoryColors[i % _categoryColors.length];
-
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: Row(
                   children: [
-                    Icon(_iconForCategory(name), size: 18, color: AppTheme.textGrey),
+                    Icon(_iconForCategory(name),
+                        size: 18, color: AppTheme.textGrey),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -493,13 +614,12 @@ class _ReportsPageState extends State<ReportsPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(name,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppTheme.textDark)),
+                                style: const TextStyle(fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppTheme.textDark)),
                               Text('$count prod.',
-                                  style: const TextStyle(
-                                      fontSize: 11, color: AppTheme.textGrey)),
+                                style: const TextStyle(fontSize: 11,
+                                    color: AppTheme.textGrey)),
                             ],
                           ),
                           const SizedBox(height: 5),
@@ -545,13 +665,12 @@ class _ReportsPageState extends State<ReportsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textDark)),
+                  style: const TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w600, color: AppTheme.textDark)),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(fontSize: 11, color: AppTheme.textGrey)),
+                  style: const TextStyle(fontSize: 11,
+                      color: AppTheme.textGrey)),
               ],
             ),
           ),
