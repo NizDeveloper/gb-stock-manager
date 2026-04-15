@@ -53,6 +53,37 @@ class _DashboardPageState extends State<DashboardPage> {
       setState(() => _loading = false);
     }
   }
+  
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Cerrar sesión',
+          style: TextStyle(color: Colors.white)),
+        content: const Text('¿Seguro que quieres cerrar sesión?',
+          style: TextStyle(color: Color(0xFF9CA3AF))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar',
+              style: TextStyle(color: Color(0xFF9CA3AF))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cerrar sesión',
+              style: TextStyle(color: Color(0xFFEF4444))),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,10 +99,32 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Saludo ───
-            const Text('Bienvenido 👋', style: TextStyle(fontSize: 13, color: AppTheme.textGrey)),
-            Text(_userName, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppTheme.textDark)),
-            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Bienvenido 👋',
+                      style: TextStyle(fontSize: 13, color: AppTheme.textGrey)),
+                    Text(_userName,
+                      style: const TextStyle(fontSize: 26,
+                          fontWeight: FontWeight.bold, color: AppTheme.textDark)),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: _logout,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.logout_rounded, color: AppTheme.danger, size: 22),
+                  ),
+                ),
+              ],
+            ),
 
             // ─── Stats Grid ───
             GridView.count(
