@@ -4,6 +4,7 @@ import 'package:gb_stock_manager/features/dashboard/presentation/pages/dashboard
 import 'package:gb_stock_manager/features/inventory/presentation/pages/inventory_page.dart';
 import 'package:gb_stock_manager/features/catalog/presentation/pages/catalog_page.dart';
 import 'package:gb_stock_manager/features/reports/presentation/pages/reports_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -21,6 +22,37 @@ class _HomePageState extends State<HomePage> {
   void _onFabPressed() {
     if (_selectedIndex == 1 && _openInventoryForm != null) {
       _openInventoryForm!();
+    }
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Cerrar sesión',
+          style: TextStyle(color: Colors.white)),
+        content: const Text('¿Seguro que quieres cerrar sesión?',
+          style: TextStyle(color: Color(0xFF9CA3AF))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar',
+              style: TextStyle(color: Color(0xFF9CA3AF))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cerrar sesión',
+              style: TextStyle(color: Color(0xFFEF4444))),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
     }
   }
 
